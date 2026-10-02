@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const tilstand = { retning: "inn", lokasjoner: [], rader: { inn: [], ut: [] } };
+const tilstand = { retning: "inn", lokasjoner: [], rader: { inn: [], ut: [] }, sok: "" };
 const ANTALL_I_LISTE = 100;
 
 // Skannere med amerikansk tastaturoppsett kan sende "+" i stedet for "-" på norsk oppsett.
@@ -113,20 +113,30 @@ function visListe(retning, nyId) {
   const rader = tilstand.rader[retning];
   ol.replaceChildren();
   if (!rader.length) {
-    ol.append(el("li", "tom", retning === "inn" ? "Ingen varer registrert inn ennå." : "Ingen varer registrert ut ennå."));
+    const tekst = tilstand.sok
+      ? `Ingen treff på «${tilstand.sok}».`
+      : retning === "inn" ? "Ingen varer registrert inn ennå." : "Ingen varer registrert ut ennå.";
+    ol.append(el("li", "tom", tekst));
   }
   for (const r of rader) ol.append(lagRad(r, r.id === nyId));
-  $("antall-" + retning).textContent = rader.length ? `siste ${rader.length}` : "";
+  const antall = rader.length;
+  $("antall-" + retning).textContent = tilstand.sok
+    ? `${antall}${antall >= ANTALL_I_LISTE ? "+" : ""} treff`
+    : antall ? `siste ${antall}` : "";
 }
 
-async function lastListe(retning) {
-  tilstand.rader[retning] = await api(`bevegelser?retning=${retning}&top=${ANTALL_I_LISTE}`);
+async function lastListe(retning, sok) {
+  const q = sok ? `&q=${encodeURIComponent(sok)}` : "";
+  const rader = await api(`bevegelser?retning=${retning}&top=${ANTALL_I_LISTE}${q}`);
+  if (sok !== tilstand.sok) return; // et nyere søk har tatt over
+  tilstand.rader[retning] = rader;
   visListe(retning);
 }
 
 async function oppdaterLister() {
   try {
-    await Promise.all([lastListe("inn"), lastListe("ut")]);
+    const sok = tilstand.sok;
+    await Promise.all([lastListe("inn", sok), lastListe("ut", sok)]);
   } catch (e) {
     melding("feil", e.message, true);
   }
@@ -246,8 +256,12 @@ async function behandleSkann() {
         lokasjon: lok.navn,
       }),
     });
-    tilstand.rader[retning] = [rad, ...tilstand.rader[retning]].slice(0, ANTALL_I_LISTE);
-    visListe(retning, rad.id);
+    if (tilstand.sok) {
+      oppdaterLister();
+    } else {
+      tilstand.rader[retning] = [rad, ...tilstand.rader[retning]].slice(0, ANTALL_I_LISTE);
+      visListe(retning, rad.id);
+    }
     melding("ok", `${verdi} registrert ${retning} på ${lok.navn}`);
   } catch (e) {
     melding("feil", `${verdi} ble ikke registrert. ${e.message}`);
@@ -259,6 +273,24 @@ $("skann").addEventListener("keydown", (ev) => {
     ev.preventDefault();
     behandleSkann();
   }
+});
+
+// ---------- Søk ----------
+
+let sokTimer;
+function sok(umiddelbart) {
+  clearTimeout(sokTimer);
+  sokTimer = setTimeout(() => {
+    tilstand.sok = $("sok").value.trim();
+    oppdaterLister();
+  }, umiddelbart ? 0 : 300);
+}
+
+$("sok").addEventListener("input", () => sok(false));
+$("sok").addEventListener("keydown", (ev) => {
+  // Skanneren sender Enter: søk med en gang, men registrer ingenting.
+  if (ev.key === "Enter") { ev.preventDefault(); sok(true); }
+  if (ev.key === "Escape") { $("sok").value = ""; sok(true); $("skann").focus(); }
 });
 
 // Klikk på tom flate sender markøren tilbake til skannefeltet.
