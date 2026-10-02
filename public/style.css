@@ -1,0 +1,236 @@
+:root {
+  --betong: #e6e9e7;
+  --flate: #ffffff;
+  --blekk: #1d2a2f;
+  --dempet: #5b6a70;
+  --linje: #c9d0cd;
+  --inn: #1e7a4c;
+  --inn-lys: #e2f1e8;
+  --ut: #c95a0c;
+  --ut-lys: #fbeadb;
+  --feil: #b3261e;
+  --feil-lys: #fbe4e2;
+  --modus: var(--inn);
+  --modus-lys: var(--inn-lys);
+  font-family: "Barlow", system-ui, sans-serif;
+  font-size: 16px;
+  color: var(--blekk);
+  background: var(--betong);
+}
+
+body[data-retning="ut"] {
+  --modus: var(--ut);
+  --modus-lys: var(--ut-lys);
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+
+h1, h2 {
+  font-family: "Barlow Semi Condensed", "Barlow", sans-serif;
+  font-weight: 700;
+  margin: 0;
+}
+
+.topp {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1rem 1.5rem 0;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.topp h1 { font-size: 2rem; letter-spacing: -0.01em; }
+
+.bruker { display: flex; gap: 1rem; color: var(--dempet); font-size: 0.9rem; }
+.bruker a { color: var(--blekk); }
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 3rem;
+}
+
+.registrering {
+  background: var(--flate);
+  border-radius: 6px;
+  padding: 1.25rem;
+  border-left: 10px solid var(--modus);
+  transition: border-color 0.15s;
+}
+
+.felter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.felt { display: flex; flex-direction: column; gap: 0.3rem; }
+.felt > span { font-size: 0.85rem; font-weight: 500; color: var(--dempet); }
+
+input, select, button {
+  font: inherit;
+  color: inherit;
+}
+
+input, select {
+  height: 2.6rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--linje);
+  border-radius: 4px;
+  background: var(--flate);
+  width: 100%;
+}
+
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--modus);
+  outline-offset: 1px;
+}
+
+.skannelinje {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.modus { display: flex; }
+
+.modus button {
+  font-family: "Barlow Semi Condensed", "Barlow", sans-serif;
+  font-weight: 700;
+  font-size: 1.4rem;
+  height: 3.6rem;
+  width: 5.5rem;
+  border: 2px solid var(--linje);
+  background: var(--flate);
+  color: var(--dempet);
+  cursor: pointer;
+}
+.modus button:first-child { border-radius: 4px 0 0 4px; }
+.modus button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+#knapp-inn[aria-pressed="true"] { background: var(--inn); border-color: var(--inn); color: #fff; }
+#knapp-ut[aria-pressed="true"] { background: var(--ut); border-color: var(--ut); color: #fff; }
+
+.skann { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; }
+.skann > span { font-size: 0.85rem; font-weight: 600; color: var(--modus); }
+.skann input {
+  height: 3.6rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.35rem;
+  border: 2px solid var(--modus);
+  background: var(--modus-lys);
+}
+.skann input::placeholder { font-family: "Barlow", sans-serif; font-size: 1rem; color: var(--dempet); }
+
+.melding {
+  min-height: 1.6rem;
+  margin: 0.75rem 0 0;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.melding.ok { background: var(--modus-lys); color: var(--modus); }
+.melding.feil { background: var(--feil-lys); color: var(--feil); }
+.melding.blink { animation: blink 0.4s ease-out; }
+@keyframes blink { from { filter: brightness(0.85); } to { filter: none; } }
+
+.lister {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.liste h2 {
+  font-size: 1.4rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 3px solid var(--inn);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.liste[data-retning="ut"] h2 { border-color: var(--ut); }
+.antall { font-family: "Barlow", sans-serif; font-weight: 400; font-size: 0.9rem; color: var(--dempet); }
+
+.liste ol { list-style: none; margin: 0; padding: 0; }
+
+.rad {
+  background: var(--flate);
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--betong);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.75rem;
+}
+.rad.ny { animation: ny 1.2s ease-out; }
+@keyframes ny { from { background: var(--modus-lys); } to { background: var(--flate); } }
+
+.rad .kode { font-family: "IBM Plex Mono", monospace; font-weight: 500; overflow-wrap: anywhere; }
+.rad .lok {
+  justify-self: end;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  background: var(--betong);
+  white-space: nowrap;
+}
+.rad .info { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.85rem; color: var(--dempet); }
+.rad .info .hvem { color: var(--blekk); font-weight: 500; }
+
+.tom { color: var(--dempet); padding: 0.8rem 0; }
+
+.admin {
+  margin-top: 2rem;
+  background: var(--flate);
+  border-radius: 6px;
+  padding: 0.9rem 1.25rem;
+}
+.admin summary {
+  cursor: pointer;
+  font-family: "Barlow Semi Condensed", "Barlow", sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.ny-lokasjon {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: 1rem;
+}
+
+.admin button, .lokasjonsliste button {
+  height: 2.6rem;
+  padding: 0 1rem;
+  border: 1px solid var(--blekk);
+  border-radius: 4px;
+  background: var(--flate);
+  cursor: pointer;
+}
+.admin button[type="submit"] { background: var(--blekk); color: #fff; }
+
+.lokasjonsliste { list-style: none; padding: 0; margin: 1rem 0; }
+.lokasjonsliste li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--betong);
+}
+.lokasjonsliste .kode { font-family: "IBM Plex Mono", monospace; margin-right: 0.75rem; }
+.lokasjonsliste button { height: 2rem; font-size: 0.85rem; border-color: var(--linje); }
+
+@media (max-width: 760px) {
+  .felter, .ny-lokasjon { grid-template-columns: 1fr; }
+  .skannelinje { flex-direction: column; align-items: stretch; }
+  .modus button { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
