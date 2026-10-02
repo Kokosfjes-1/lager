@@ -137,11 +137,21 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 .melding.blink { animation: blink 0.4s ease-out; }
 @keyframes blink { from { filter: brightness(0.85); } to { filter: none; } }
 
+.sok {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 1.75rem;
+}
+.sok label { font-size: 0.85rem; font-weight: 500; color: var(--dempet); }
+.sok input { max-width: 36rem; border-color: var(--blekk); }
+.sok input:focus-visible { outline-color: var(--blekk); }
+
 .lister {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.25rem;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
 }
 
 .liste h2 {
