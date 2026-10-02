@@ -19,7 +19,14 @@ function tilRad(e) {
   };
 }
 
-// GET /api/bevegelser?retning=inn&top=100
+// Sjekker om et søkeord finnes i et av tekstfeltene (store/små bokstaver spiller ingen rolle).
+function treff(e, sok) {
+  return [e.Kode, e.Navn, e.Kommentar, e.Lokasjon, e.LokasjonKode, e.RegistrertAv]
+    .some((felt) => String(felt || "").toLowerCase().includes(sok));
+}
+
+// GET /api/bevegelser?retning=inn&top=100&q=hdmi
+// Table Storage kan ikke søke i deler av tekst, så vi leser radene og filtrerer selv.
 app.http("bevegelserListe", {
   methods: ["GET"],
   authLevel: "anonymous",
@@ -28,11 +35,13 @@ app.http("bevegelserListe", {
     const retning = request.query.get("retning");
     if (!RETNINGER.includes(retning)) return svar(400, { feil: "Retning må være inn eller ut" });
     const top = Math.min(Math.max(parseInt(request.query.get("top"), 10) || 100, 1), 500);
+    const sok = vask(request.query.get("q"), 100).toLowerCase();
 
     const tabell = await hentTabell(TABELL);
     const rader = [];
     const liste = tabell.listEntities({ queryOptions: { filter: odata`PartitionKey eq ${retning}` } });
     for await (const e of liste) {
+      if (sok && !treff(e, sok)) continue;
       rader.push(tilRad(e));
       if (rader.length >= top) break;
     }
