@@ -223,6 +223,34 @@ input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible
 
 .tom { color: var(--dempet); padding: 0.8rem 0; }
 
+.mer {
+  display: block;
+  width: 100%;
+  height: 2.2rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--linje);
+  border-radius: 4px;
+  background: var(--flate);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.mer:hover { border-color: var(--blekk); }
+.mer[hidden] { display: none; }
+
+.rad .slett {
+  margin-left: auto;
+  height: 1.6rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--linje);
+  border-radius: 4px;
+  background: var(--flate);
+  color: var(--feil);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.rad .slett:hover { border-color: var(--feil); background: var(--feil-lys); }
+.rad .slett:disabled { opacity: 0.5; cursor: default; }
+
 .admin {
   margin-top: 2rem;
   background: var(--flate);

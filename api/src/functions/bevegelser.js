@@ -40,6 +40,15 @@ async function sisteInn(tabell, kode) {
   return null;
 }
 
+// Finnes det en inn- eller ut-bevegelse for koden som er nyere enn id? Lavere RowKey er nyere.
+async function harNyereBevegelse(tabell, kode, id) {
+  const rader = tabell.listEntities({
+    queryOptions: { filter: odata`Kode eq ${kode} and RowKey lt ${id}`, select: ["RowKey"] },
+  });
+  for await (const _ of rader) return true;
+  return false;
+}
+
 // Beholdning-tabellen kom etter Bevegelser. Er den tom, bygges den fra historikken
 // (varer med flere inn enn ut regnes som inne). Kjøres én gang per oppstart.
 let beholdningKlar;
@@ -245,6 +254,8 @@ app.http("bevegelserNy", {
 
 // DELETE /api/bevegelser/{retning}/{id}
 // Brukes av Angre-knappen: bare egne registreringer, og bare de siste minuttene.
+// Admin kan slette hvilken som helst registrering. Beholdningen rettes bare når
+// registreringen er den siste for varen; eldre registreringer fjernes bare fra historikken.
 app.http("bevegelserAngre", {
   methods: ["DELETE"],
   authLevel: "anonymous",
@@ -262,11 +273,12 @@ app.http("bevegelserAngre", {
       throw e;
     }
 
-    if (entitet.RegistrertAv !== bruker.userDetails) {
+    const admin = erAdmin(bruker);
+    if (!admin && entitet.RegistrertAv !== bruker.userDetails) {
       return svar(403, { feil: "Du kan bare angre dine egne registreringer" });
     }
     const alderMinutter = (Date.now() - new Date(entitet.Tidspunkt).getTime()) / 60000;
-    if (alderMinutter > ANGRE_MINUTTER) {
+    if (!admin && alderMinutter > ANGRE_MINUTTER) {
       return svar(403, { feil: `Kan bare angre de siste ${ANGRE_MINUTTER} minuttene` });
     }
 
@@ -279,10 +291,15 @@ app.http("bevegelserAngre", {
         if (e.statusCode === 404) return null;
         throw e;
       });
-      if (!inne || inne.BevegelseId !== id) {
+      if (inne && inne.BevegelseId === id) {
+        await beholdning.deleteEntity(INNE, nokkel, { etag: inne.etag });
+      } else if (!admin) {
         return svar(409, { feil: `${entitet.Kode} er skannet ut etterpå. Angre utskanningen først.` });
       }
-      await beholdning.deleteEntity(INNE, nokkel, { etag: inne.etag });
+    } else if (await harNyereBevegelse(tabell, entitet.Kode, id)) {
+      if (!admin) {
+        return svar(409, { feil: `${entitet.Kode} er skannet inn igjen etterpå, så utskanningen kan ikke angres.` });
+      }
     } else {
       // Legg varen tilbake på lageret slik den ble registrert inn sist.
       const forrige = await sisteInn(tabell, entitet.Kode);

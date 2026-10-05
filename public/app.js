@@ -8,9 +8,11 @@ const tilstand = {
   sok: "",
   bruker: "",
   admin: false,
+  visAlle: { inn: false, ut: false, aktivitet: false },
 };
 const LISTER = ["inn", "ut", "aktivitet"];
 const ANTALL_I_LISTE = 100;
+const ANTALL_KORT = 5;
 const MAKS_CSV = 5000;
 
 // Skannere med amerikansk tastaturoppsett kan sende "+" i stedet for "-" på norsk oppsett.
@@ -134,6 +136,12 @@ function lagRad(r, ny, visRetning) {
   info.append(el("span", "hvem", r.navn));
   if (r.kommentar) info.append(el("span", "", r.kommentar));
   if (r.registrertAv && r.registrertAv !== r.navn) info.append(el("span", "", `registrert av ${r.registrertAv}`));
+  if (tilstand.admin) {
+    const slett = el("button", "slett", "Slett");
+    slett.type = "button";
+    slett.addEventListener("click", () => slettRegistrering(r, slett));
+    info.append(slett);
+  }
   li.append(info);
   return li;
 }
@@ -152,13 +160,44 @@ function antallTekst(liste, antall) {
   return `siste ${antall}`;
 }
 
+// Viser de siste fem, eller opptil hundre når listen er utvidet eller det søkes.
 function visListe(liste, nyId) {
   const ol = $("liste-" + liste);
   const rader = tilstand.rader[liste];
+  const alle = tilstand.visAlle[liste] || tilstand.sok;
   ol.replaceChildren();
   if (!rader.length) ol.append(el("li", "tom", tilstand.sok ? `Ingen treff på «${tilstand.sok}».` : TOM_TEKST[liste]));
-  for (const r of rader) ol.append(lagRad(r, r.id === nyId, liste === "aktivitet"));
+  for (const r of rader.slice(0, alle ? ANTALL_I_LISTE : ANTALL_KORT)) {
+    ol.append(lagRad(r, r.id === nyId, liste === "aktivitet"));
+  }
   $("antall-" + liste).textContent = antallTekst(liste, rader.length);
+
+  const knapp = $("mer-" + liste);
+  knapp.hidden = Boolean(tilstand.sok) || rader.length <= ANTALL_KORT;
+  knapp.textContent = tilstand.visAlle[liste] ? `Vis bare siste ${ANTALL_KORT}` : `Vis siste ${ANTALL_I_LISTE}`;
+}
+
+for (const knapp of document.querySelectorAll(".mer")) {
+  knapp.addEventListener("click", () => {
+    const liste = knapp.dataset.liste;
+    tilstand.visAlle[liste] = !tilstand.visAlle[liste];
+    visListe(liste);
+  });
+}
+
+// Admin kan slette registreringer for godt, også eldre enn angrefristen.
+async function slettRegistrering(r, knapp) {
+  if (!confirm(`Slette registreringen av ${r.kode} (${r.retning}, ${formaterTid(r.tidspunkt)}) fra databasen? Dette kan ikke angres.`)) return;
+  knapp.disabled = true;
+  try {
+    await api(`bevegelser/${r.retning}/${encodeURIComponent(r.id)}`, { method: "DELETE" });
+    fjernLokalt(r.id);
+    await oppdaterLister();
+    melding("ok", `Slettet: ${r.kode} (${r.retning})`, true);
+  } catch (e) {
+    knapp.disabled = false;
+    melding("feil", `Kunne ikke slette. ${e.message}`);
+  }
 }
 
 function sti(base, params) {
@@ -536,7 +575,8 @@ $("sok").addEventListener("keydown", (ev) => {
 
 // Klikk på tom flate sender markøren tilbake til skannefeltet.
 document.addEventListener("click", (ev) => {
-  if (!ev.target.closest("input, select, button, a, summary, textarea, form")) $("skann").focus();
+  // preventScroll: ellers hopper siden til toppen hver gang man klikker i listene.
+  if (!ev.target.closest("input, select, button, a, summary, textarea, form")) $("skann").focus({ preventScroll: true });
 });
 
 $("knapp-inn").addEventListener("click", () => { settRetning("inn"); $("skann").focus(); });
