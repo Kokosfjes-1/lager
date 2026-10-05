@@ -3,7 +3,7 @@
     { "route": "/.auth/login/aad", "statusCode": 404 },
     { "route": "/.auth/login/twitter", "statusCode": 404 },
     { "route": "/ingen-tilgang.html", "allowedRoles": ["anonymous", "authenticated"] },
-    { "route": "/*", "allowedRoles": ["lagerbruker"] }
+    { "route": "/*", "allowedRoles": ["lagerbruker", "lageradmin"] }
   ],
   "responseOverrides": {
     "401": { "redirect": "/.auth/login/github?post_login_redirect_uri=/", "statusCode": 302 },

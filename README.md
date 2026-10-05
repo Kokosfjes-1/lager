@@ -1,6 +1,8 @@
 # Lagersystem – lager.vebjorn.world
 
-Første versjon: skann varer inn og ut med navn, kommentar og lokasjon. Innlogging med GitHub.
+Skann varer inn og ut med navn, kommentar og lokasjon. Innlogging med GitHub.
+En vare kan bare være inne én gang: inn avvises hvis den allerede er på lageret, og ut
+avvises hvis den ikke er det. Listene *Inne*, *Ut* og *Aktivitet* kan lastes ned som CSV.
 Frontend i `public/`, API (Azure Functions, Node 20) i `api/`, data i Azure Table Storage.
 
 ## Mappestruktur
@@ -25,6 +27,10 @@ api/
 **Bevegelser**: PartitionKey = `inn` eller `ut`, RowKey = omvendt tidsstempel (nyeste først).
 Felter: Kode, Navn, Kommentar, LokasjonKode, Lokasjon, RegistrertAv (innlogget konto), Tidspunkt.
 
+**Beholdning**: det som er på lageret nå. PartitionKey = `inne`, RowKey = strekkoden som
+base64url. Samme felter som Bevegelser, pluss BevegelseId (inn-registreringen). Skann inn
+oppretter raden, skann ut sletter den. Er tabellen tom ved oppstart, bygges den fra Bevegelser.
+
 **Lokasjoner**: PartitionKey = `lokasjon`, RowKey = kode (f.eks. `A3`). Felt: Navn.
 
 ## Sette opp i Azure
@@ -43,11 +49,15 @@ Felter: Kode, Navn, Kommentar, LokasjonKode, Lokasjon, RegistrertAv (innlogget k
 
 ## Gi folk tilgang
 
-Alle sider og hele API-et krever rollen `lagerbruker`.
+Alle sider og hele API-et krever rollen `lagerbruker` eller `lageradmin`.
+
+- `lagerbruker` ser *Inne* og *Ut*, men under *Aktivitet* bare sine egne registreringer
+  fra denne nettleseren (lagret i localStorage, tømmes ved utlogging).
+- `lageradmin` kan i tillegg se all aktivitet fra alle brukere.
 
 1. Static Web App → *Settings → Role management → Invite*.
 2. Provider: **GitHub**, domene `lager.vebjorn.world`,
-   GitHub-brukernavnet deres (ikke e-post), rolle `lagerbruker`.
+   GitHub-brukernavnet deres (ikke e-post), rolle `lagerbruker` (eller `lageradmin`).
 3. Send lenken til personen. Når de åpner den og logger inn, har de tilgang.
 
 Inviter deg selv først. Uten rolle får man siden «Du har ikke tilgang».
@@ -78,9 +88,9 @@ swa start public --api-location api
 ```
 
 Åpne http://localhost:4280. Ved den falske innloggingen: skriv inn et brukernavn og
-legg til `lagerbruker` i feltet for roller.
+legg til `lagerbruker` (eller `lageradmin`) i feltet for roller.
 
 ## Ikke med i versjon 1
 
-Slette eller rette feilskanninger, antallsfelt, varelinjer med navn på strekkoder,
-beholdning, serienummer, retur, bestillinger og varsler.
+Rette feilskanninger etter 15 minutter, antallsfelt, varelinjer med navn på strekkoder,
+serienummer, retur og bestillinger.

@@ -14,7 +14,7 @@
     <h1>Lager</h1>
     <div class="bruker">
       <span id="bruker-navn"></span>
-      <a href="/.auth/logout?post_logout_redirect_uri=/">Logg ut</a>
+      <a id="logg-ut" href="/.auth/logout?post_logout_redirect_uri=/">Logg ut</a>
     </div>
   </header>
 
@@ -55,13 +55,31 @@
 
     <section class="lister">
       <div class="liste" data-retning="inn">
-        <h2>Inn <span class="antall" id="antall-inn"></span></h2>
+        <div class="liste-topp">
+          <h2>Inne</h2>
+          <span class="antall" id="antall-inn"></span>
+          <button type="button" class="csv" data-liste="inn">Last ned CSV</button>
+        </div>
         <ol id="liste-inn"></ol>
       </div>
       <div class="liste" data-retning="ut">
-        <h2>Ut <span class="antall" id="antall-ut"></span></h2>
+        <div class="liste-topp">
+          <h2>Ut</h2>
+          <span class="antall" id="antall-ut"></span>
+          <button type="button" class="csv" data-liste="ut">Last ned CSV</button>
+        </div>
         <ol id="liste-ut"></ol>
       </div>
+    </section>
+
+    <section class="liste aktivitet" data-retning="alle">
+      <div class="liste-topp">
+        <h2 id="aktivitet-tittel">Aktivitet</h2>
+        <span class="antall" id="antall-aktivitet"></span>
+        <button type="button" class="csv" data-liste="aktivitet">Last ned CSV</button>
+      </div>
+      <p class="forklaring" id="aktivitet-forklaring"></p>
+      <ol id="liste-aktivitet"></ol>
     </section>
 
     <details class="admin" id="admin">

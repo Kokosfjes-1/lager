@@ -2,6 +2,7 @@ const { TableClient } = require("@azure/data-tables");
 const crypto = require("crypto");
 
 const ROLLE = "lagerbruker";
+const ADMIN = "lageradmin";
 const tabeller = {};
 
 // Henter en tabellklient og oppretter tabellen første gang den brukes.
@@ -36,10 +37,16 @@ function hentBruker(request) {
   }
 }
 
+function erAdmin(bruker) {
+  return (bruker?.userRoles || []).includes(ADMIN);
+}
+
 // Ekstra sikring i tillegg til rutereglene i staticwebapp.config.json.
+// Admin har tilgang selv uten lagerbruker-rollen.
 function krevBruker(request) {
   const bruker = hentBruker(request);
-  if (!bruker || !(bruker.userRoles || []).includes(ROLLE)) return null;
+  if (!bruker) return null;
+  if (!(bruker.userRoles || []).includes(ROLLE) && !erAdmin(bruker)) return null;
   return bruker;
 }
 
@@ -76,4 +83,4 @@ function beskyttet(handler) {
   };
 }
 
-module.exports = { hentTabell, vask, vaskKode, omvendtNokkel, svar, beskyttet };
+module.exports = { hentTabell, vask, vaskKode, omvendtNokkel, svar, beskyttet, erAdmin };

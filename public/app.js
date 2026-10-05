@@ -1,8 +1,17 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const tilstand = { retning: "inn", lokasjoner: [], rader: { inn: [], ut: [] }, sok: "" };
+const tilstand = {
+  retning: "inn",
+  lokasjoner: [],
+  rader: { inn: [], ut: [], aktivitet: [] },
+  sok: "",
+  bruker: "",
+  admin: false,
+};
+const LISTER = ["inn", "ut", "aktivitet"];
 const ANTALL_I_LISTE = 100;
+const MAKS_CSV = 5000;
 
 // Skannere med amerikansk tastaturoppsett kan sende "+" i stedet for "-" på norsk oppsett.
 const LOKASJON_PREFIKS = /^LOK[-+]/i;
@@ -21,7 +30,11 @@ async function api(sti, valg = {}) {
     throw new Error("Får ikke kontakt med serveren. Sjekk nettet, eller last inn siden på nytt hvis du har vært logget ut.");
   }
   const data = res.status === 204 ? null : await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.feil || `Serveren svarte med feil ${res.status}`);
+  if (!res.ok) {
+    const feil = new Error(data?.feil || `Serveren svarte med feil ${res.status}`);
+    feil.varsel = data?.varsel;
+    throw feil;
+  }
   return data;
 }
 
@@ -110,11 +123,12 @@ function settRetning(retning) {
 
 // ---------- Lister ----------
 
-function lagRad(r, ny) {
+function lagRad(r, ny, visRetning) {
   const li = el("li", "rad" + (ny ? " ny" : ""));
   li.append(el("span", "kode", r.kode));
   li.append(el("span", "lok", r.lokasjon || r.lokasjonKode));
   const info = el("div", "info");
+  if (visRetning) info.append(el("span", "merke " + r.retning, r.retning));
   info.append(el("time", "", formaterTid(r.tidspunkt)));
   info.lastChild.dateTime = r.tidspunkt;
   info.append(el("span", "hvem", r.navn));
@@ -124,38 +138,169 @@ function lagRad(r, ny) {
   return li;
 }
 
-function visListe(retning, nyId) {
-  const ol = $("liste-" + retning);
-  const rader = tilstand.rader[retning];
-  ol.replaceChildren();
-  if (!rader.length) {
-    const tekst = tilstand.sok
-      ? `Ingen treff på «${tilstand.sok}».`
-      : retning === "inn" ? "Ingen varer registrert inn ennå." : "Ingen varer registrert ut ennå.";
-    ol.append(el("li", "tom", tekst));
-  }
-  for (const r of rader) ol.append(lagRad(r, r.id === nyId));
-  const antall = rader.length;
-  $("antall-" + retning).textContent = tilstand.sok
-    ? `${antall}${antall >= ANTALL_I_LISTE ? "+" : ""} treff`
-    : antall ? `siste ${antall}` : "";
+const TOM_TEKST = {
+  inn: "Ingen varer på lageret.",
+  ut: "Ingen varer registrert ut ennå.",
+  aktivitet: "Ingen registreringer ennå.",
+};
+
+function antallTekst(liste, antall) {
+  if (tilstand.sok) return `${antall}${liste !== "inn" && antall >= ANTALL_I_LISTE ? "+" : ""} treff`;
+  if (!antall) return "";
+  if (liste === "inn") return `${antall} stk`;
+  if (liste === "aktivitet" && !tilstand.admin) return `${antall}`;
+  return `siste ${antall}`;
 }
 
-async function lastListe(retning, sok) {
-  const q = sok ? `&q=${encodeURIComponent(sok)}` : "";
-  const rader = await api(`bevegelser?retning=${retning}&top=${ANTALL_I_LISTE}${q}`);
+function visListe(liste, nyId) {
+  const ol = $("liste-" + liste);
+  const rader = tilstand.rader[liste];
+  ol.replaceChildren();
+  if (!rader.length) ol.append(el("li", "tom", tilstand.sok ? `Ingen treff på «${tilstand.sok}».` : TOM_TEKST[liste]));
+  for (const r of rader) ol.append(lagRad(r, r.id === nyId, liste === "aktivitet"));
+  $("antall-" + liste).textContent = antallTekst(liste, rader.length);
+}
+
+function sti(base, params) {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== "" && v !== undefined));
+  const tekst = q.toString();
+  return tekst ? `${base}?${tekst}` : base;
+}
+
+// Henter radene til en liste fra serveren (eller lokalt lagret aktivitet for vanlige brukere).
+function hentRader(liste, sok, top) {
+  if (liste === "inn") return api(sti("beholdning", { q: sok }));
+  if (liste === "ut") return api(sti("bevegelser", { retning: "ut", top, q: sok }));
+  if (tilstand.admin) return api(sti("aktivitet", { top, q: sok }));
+  return Promise.resolve(filtrerLokalt(hentLokalAktivitet(), sok));
+}
+
+async function lastListe(liste, sok) {
+  const rader = await hentRader(liste, sok, ANTALL_I_LISTE);
   if (sok !== tilstand.sok) return; // et nyere søk har tatt over
-  tilstand.rader[retning] = rader;
-  visListe(retning);
+  tilstand.rader[liste] = rader;
+  visListe(liste);
 }
 
 async function oppdaterLister() {
   try {
     const sok = tilstand.sok;
-    await Promise.all([lastListe("inn", sok), lastListe("ut", sok)]);
+    await Promise.all(LISTER.map((liste) => lastListe(liste, sok)));
   } catch (e) {
     melding("feil", e.message, true);
   }
+}
+
+// Legger en ny registrering inn i listene uten å hente alt på nytt.
+function visRegistrering(rad) {
+  if (tilstand.sok) return oppdaterLister();
+  const { rader } = tilstand;
+  if (rad.retning === "inn") {
+    rader.inn = [rad, ...rader.inn];
+  } else {
+    rader.inn = rader.inn.filter((r) => r.kode !== rad.kode);
+    rader.ut = [rad, ...rader.ut].slice(0, ANTALL_I_LISTE);
+  }
+  rader.aktivitet = tilstand.admin
+    ? [rad, ...rader.aktivitet].slice(0, ANTALL_I_LISTE)
+    : hentLokalAktivitet();
+  visListe("inn", rad.retning === "inn" ? rad.id : undefined);
+  visListe("ut", rad.id);
+  visListe("aktivitet", rad.id);
+}
+
+// ---------- Egen aktivitet (lagres i nettleseren) ----------
+
+const AKTIVITET_NOKKEL = "lager-aktivitet";
+const MAKS_LOKAL = 1000;
+
+function hentLokalAktivitet() {
+  try {
+    const lagret = JSON.parse(localStorage.getItem(AKTIVITET_NOKKEL));
+    return lagret?.bruker === tilstand.bruker && Array.isArray(lagret.rader) ? lagret.rader : [];
+  } catch {
+    return [];
+  }
+}
+
+function lagreLokalAktivitet(rader) {
+  try {
+    localStorage.setItem(AKTIVITET_NOKKEL, JSON.stringify({ bruker: tilstand.bruker, rader: rader.slice(0, MAKS_LOKAL) }));
+  } catch { /* lagring er bare en bekvemmelighet */ }
+}
+
+function loggLokalt(rad) {
+  const { varsel, ...ren } = rad;
+  lagreLokalAktivitet([ren, ...hentLokalAktivitet()]);
+}
+
+function fjernLokalt(id) {
+  lagreLokalAktivitet(hentLokalAktivitet().filter((r) => r.id !== id));
+}
+
+function filtrerLokalt(rader, sok) {
+  if (!sok) return rader;
+  const s = sok.toLowerCase();
+  return rader.filter((r) =>
+    [r.kode, r.navn, r.kommentar, r.lokasjon, r.lokasjonKode, r.registrertAv]
+      .some((felt) => String(felt || "").toLowerCase().includes(s)));
+}
+
+function visAktivitetTittel() {
+  $("aktivitet-tittel").textContent = tilstand.admin ? "All aktivitet" : "Din aktivitet";
+  $("aktivitet-forklaring").textContent = tilstand.admin
+    ? ""
+    : "Det du har registrert i denne nettleseren siden du logget inn. Tømmes når du logger ut.";
+}
+
+// ---------- CSV ----------
+
+const CSV_KOLONNER = [
+  ["Retning", (r) => r.retning],
+  ["Tidspunkt", (r) => new Date(r.tidspunkt).toLocaleString("sv-SE")],
+  ["Strekkode", (r) => r.kode],
+  ["Navn", (r) => r.navn],
+  ["Kommentar", (r) => r.kommentar],
+  ["Lokasjonskode", (r) => r.lokasjonKode],
+  ["Lokasjon", (r) => r.lokasjon],
+  ["Registrert av", (r) => r.registrertAv],
+];
+
+// Semikolon og BOM gjør at norsk Excel åpner filen riktig.
+// Celler som starter med = + - @ får en apostrof foran, så Excel ikke tolker dem som formler.
+function csvCelle(verdi) {
+  let t = String(verdi ?? "");
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+  return /[";\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+function tilCsv(rader) {
+  const linjer = [CSV_KOLONNER.map(([navn]) => navn)];
+  for (const r of rader) linjer.push(CSV_KOLONNER.map(([, hent]) => hent(r)));
+  return "\ufeff" + linjer.map((l) => l.map(csvCelle).join(";")).join("\r\n");
+}
+
+const CSV_NAVN = { inn: "inne", ut: "ut", aktivitet: "aktivitet" };
+
+async function lastNedCsv(liste, knapp) {
+  knapp.disabled = true;
+  try {
+    const rader = await hentRader(liste, tilstand.sok, MAKS_CSV);
+    const dato = new Date().toLocaleDateString("sv-SE");
+    const lenke = el("a");
+    lenke.href = URL.createObjectURL(new Blob([tilCsv(rader)], { type: "text/csv;charset=utf-8" }));
+    lenke.download = `lager-${CSV_NAVN[liste]}-${dato}.csv`;
+    lenke.click();
+    setTimeout(() => URL.revokeObjectURL(lenke.href), 1000);
+  } catch (e) {
+    melding("feil", `Kunne ikke lage CSV. ${e.message}`);
+  } finally {
+    knapp.disabled = false;
+  }
+}
+
+for (const knapp of document.querySelectorAll(".csv")) {
+  knapp.addEventListener("click", () => lastNedCsv(knapp.dataset.liste, knapp));
 }
 
 // ---------- Lokasjoner ----------
@@ -227,27 +372,7 @@ $("ny-lokasjon").addEventListener("submit", async (ev) => {
 const VARSEL_SEKUNDER = 8;
 const MAKS_VARSLER = 3;
 
-function varselTekst(rad) {
-  const lok = rad.lokasjon || rad.lokasjonKode;
-  switch (rad.varsel) {
-    case "ny":
-      return { tittel: "Ny vare", tekst: ` er ikke registrert før. Lagt inn på ${lok}.` };
-    case "allerede_inne":
-      return {
-        tittel: "Allerede på lageret",
-        tekst: ` har ${rad.paLagerFoer} stk på lageret fra før. Nå ${rad.paLagerEtter} stk.`,
-      };
-    case "ikke_inne":
-      return {
-        tittel: "Ikke på lageret",
-        tekst: rad.paLagerFoer < 0
-          ? ` er skannet ut flere ganger enn inn. Registrert ut likevel.`
-          : ` er ikke registrert inn, men ble skannet ut. Registrert likevel.`,
-      };
-    default:
-      return null;
-  }
-}
+const AVVIST_TITTEL = { allerede_inne: "Allerede på lageret", ikke_inne: "Ikke på lageret" };
 
 function lukkVarsel(boks) {
   clearTimeout(boks._timer);
@@ -265,43 +390,53 @@ function startNedtelling(boks, sekunder) {
   boks._timer = setTimeout(tikk, sekunder * 1000);
 }
 
-function visVarsel(rad) {
-  const innhold = varselTekst(rad);
-  if (!innhold) return;
-
+function lagVarsel(type, tittelTekst, innhold) {
   const beholder = $("varsler");
   while (beholder.children.length >= MAKS_VARSLER) lukkVarsel(beholder.firstElementChild);
 
-  const boks = el("div", "varsel " + rad.varsel);
+  const boks = el("div", "varsel " + type);
   boks.setAttribute("role", "alert");
-  const tittel = el("p", "tittel", innhold.tittel);
   const tekst = el("p", "tekst");
-  tekst.append(el("span", "kode", rad.kode), document.createTextNode(innhold.tekst));
-  const handling = el("div", "handling");
+  tekst.append(...innhold);
+  boks.append(el("p", "tittel", tittelTekst), tekst, el("div", "handling"), el("div", "tid"));
+  beholder.append(boks);
+  startNedtelling(boks, VARSEL_SEKUNDER);
+  return boks;
+}
+
+// Første gang en strekkode registreres inn, med mulighet for å angre.
+function visNyVare(rad) {
+  const boks = lagVarsel("ny", "Ny vare", [
+    el("span", "kode", rad.kode),
+    document.createTextNode(` er ikke registrert før. Lagt inn på ${rad.lokasjon || rad.lokasjonKode}.`),
+  ]);
   const angre = el("button", "", "Angre");
   angre.type = "button";
   angre.addEventListener("click", () => angreRegistrering(rad, boks, angre));
-  handling.append(angre);
-  boks.append(tittel, tekst, handling, el("div", "tid"));
-  beholder.append(boks);
-
-  startNedtelling(boks, VARSEL_SEKUNDER);
+  boks.querySelector(".handling").append(angre);
   varselPip();
+}
+
+// Skanningen ble avvist fordi varen allerede er inne, eller ikke er inne.
+function visAvvist(type, kode, tekst) {
+  lagVarsel(type, AVVIST_TITTEL[type], [
+    el("span", "kode", kode),
+    document.createTextNode(" ble ikke registrert. " + tekst),
+  ]);
 }
 
 async function angreRegistrering(rad, boks, knapp) {
   knapp.disabled = true;
   try {
     await api(`bevegelser/${rad.retning}/${encodeURIComponent(rad.id)}`, { method: "DELETE" });
-    tilstand.rader[rad.retning] = tilstand.rader[rad.retning].filter((r) => r.id !== rad.id);
-    visListe(rad.retning);
-    if (tilstand.sok) oppdaterLister();
+    fjernLokalt(rad.id);
+    oppdaterLister();
 
     clearTimeout(boks._timer);
     boks.className = "varsel angret";
     boks.querySelector(".tittel").textContent = "Angret";
     const tekst = boks.querySelector(".tekst");
-    tekst.replaceChildren(el("span", "kode", rad.kode), document.createTextNode(` er fjernet fra ${rad.retning}-listen.`));
+    tekst.replaceChildren(el("span", "kode", rad.kode), document.createTextNode(` er fjernet fra ${rad.retning === "inn" ? "lageret" : "ut-listen"}.`));
     knapp.parentElement.replaceChildren();
     const tid = boks.querySelector(".tid");
     tid.replaceWith(el("div", "tid"));
@@ -364,16 +499,13 @@ async function behandleSkann() {
         lokasjon: lok.navn,
       }),
     });
-    if (tilstand.sok) {
-      oppdaterLister();
-    } else {
-      tilstand.rader[retning] = [rad, ...tilstand.rader[retning]].slice(0, ANTALL_I_LISTE);
-      visListe(retning, rad.id);
-    }
+    loggLokalt(rad);
+    visRegistrering(rad);
     melding("ok", `${verdi} registrert ${retning} på ${lok.navn}`, Boolean(rad.varsel));
-    visVarsel(rad);
+    if (rad.varsel === "ny") visNyVare(rad);
   } catch (e) {
     melding("feil", `${verdi} ble ikke registrert. ${e.message}`);
+    if (AVVIST_TITTEL[e.varsel]) visAvvist(e.varsel, verdi, e.message);
   }
 }
 
@@ -416,6 +548,9 @@ for (const id of ["navn", "kommentar"]) {
   });
 }
 $("lokasjon").addEventListener("change", () => $("skann").focus());
+$("logg-ut").addEventListener("click", () => {
+  try { localStorage.removeItem(AKTIVITET_NOKKEL); } catch { /* ingenting å tømme */ }
+});
 
 // ---------- Oppstart ----------
 
@@ -429,10 +564,14 @@ async function start() {
     const meg = await fetch("/.auth/me").then((r) => r.json());
     const bruker = meg?.clientPrincipal?.userDetails;
     if (bruker) {
+      tilstand.bruker = bruker;
       $("bruker-navn").textContent = bruker;
       if (!$("navn").value) $("navn").value = bruker;
     }
+    // Bare for visning. Serveren sjekker selv om brukeren er admin.
+    tilstand.admin = (meg?.clientPrincipal?.userRoles || []).includes("lageradmin");
   } catch { /* vises bare som pynt */ }
+  visAktivitetTittel();
 
   try {
     await lastLokasjoner(lagret.lokasjon);
