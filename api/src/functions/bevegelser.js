@@ -317,3 +317,5 @@ app.http("bevegelserAngre", {
     return svar(204);
   }),
 });
+
+module.exports = { hentBeholdning };

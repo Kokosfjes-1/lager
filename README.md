@@ -53,7 +53,8 @@ Alle sider og hele API-et krever rollen `lagerbruker` eller `lageradmin`.
 
 - `lagerbruker` ser *Inne* og *Ut*, men under *Aktivitet* bare sine egne registreringer
   fra denne nettleseren (lagret i localStorage, tømmes ved utlogging).
-- `lageradmin` kan i tillegg se all aktivitet fra alle brukere.
+- `lageradmin` kan i tillegg se all aktivitet fra alle brukere, slette registreringer
+  og fjerne lokasjoner (bare når det ikke er varer inne på dem).
 
 1. Static Web App → *Settings → Role management → Invite*.
 2. Provider: **GitHub**, domene `lager.vebjorn.world`,

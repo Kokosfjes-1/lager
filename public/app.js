@@ -364,10 +364,13 @@ function visLokasjoner(valgt) {
     const li = el("li");
     const tekst = el("span");
     tekst.append(el("span", "kode", l.kode), document.createTextNode(l.navn));
-    const slett = el("button", "", "Fjern");
-    slett.type = "button";
-    slett.addEventListener("click", () => fjernLokasjon(l));
-    li.append(tekst, slett);
+    li.append(tekst);
+    if (tilstand.admin) {
+      const slett = el("button", "", "Fjern");
+      slett.type = "button";
+      slett.addEventListener("click", () => fjernLokasjon(l));
+      li.append(slett);
+    }
     ul.append(li);
   }
 }

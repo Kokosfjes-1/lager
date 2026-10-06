@@ -1,8 +1,11 @@
 const { app } = require("@azure/functions");
-const { hentTabell, vask, vaskKode, svar, beskyttet } = require("../shared");
+const { odata } = require("@azure/data-tables");
+const { hentTabell, vask, vaskKode, svar, beskyttet, erAdmin } = require("../shared");
+const { hentBeholdning } = require("./bevegelser");
 
 const TABELL = "Lokasjoner";
 const PARTISJON = "lokasjon";
+const VIS_KODER = 3;
 
 // GET /api/lokasjoner
 app.http("lokasjonerListe", {
@@ -47,13 +50,33 @@ app.http("lokasjonerNy", {
   }),
 });
 
-// DELETE /api/lokasjoner/{kode}
+// Strekkodene til varene som er inne på en lokasjon.
+async function varerInne(lokasjonKode) {
+  const beholdning = await hentBeholdning();
+  const koder = [];
+  const rader = beholdning.listEntities({
+    queryOptions: { filter: odata`PartitionKey eq 'inne' and LokasjonKode eq ${lokasjonKode}`, select: ["Kode"] },
+  });
+  for await (const e of rader) koder.push(e.Kode);
+  return koder;
+}
+
+// DELETE /api/lokasjoner/{kode}  –  bare admin, og bare når lokasjonen er tom.
 app.http("lokasjonerSlett", {
   methods: ["DELETE"],
   authLevel: "anonymous",
   route: "lokasjoner/{kode}",
-  handler: beskyttet(async (request) => {
+  handler: beskyttet(async (request, context, bruker) => {
+    if (!erAdmin(bruker)) return svar(403, { feil: "Bare admin kan fjerne lokasjoner" });
     const kode = vaskKode(request.params.kode);
+
+    const inne = await varerInne(kode);
+    if (inne.length) {
+      const eksempler = inne.slice(0, VIS_KODER).join(", ") + (inne.length > VIS_KODER ? ", …" : "");
+      const antall = inne.length === 1 ? "1 vare" : `${inne.length} varer`;
+      return svar(409, { feil: `${kode} har ${antall} inne (${eksempler}). Skann dem ut før du fjerner lokasjonen.` });
+    }
+
     const tabell = await hentTabell(TABELL);
     try {
       await tabell.deleteEntity(PARTISJON, kode);
